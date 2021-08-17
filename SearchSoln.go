@@ -3,11 +3,13 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/emirpasic/gods/maps/treemap"
 	"os"
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/emirpasic/gods/maps/treemap"
+	"github.com/emirpasic/gods/sets/treeset"
 )
 
 var SearchMap map[string][][2]int
@@ -17,10 +19,11 @@ var SubPageMap map[string][][2]int
 var MaxScore int = 8
 var QueryCount = 0
 var PageCount int = 0
+
 //Grab all queries and then compute?
 
 func main() {
-	treemap.NewWithIntComparator()
+	// treemap.NewWithIntComparator()
 	SearchMap = make(map[string][][2]int)
 	SubPageMap = make(map[string][][2]int)
 	GrabInputAndRun()
@@ -31,7 +34,7 @@ func GrabInputAndRun() {
 	var wg sync.WaitGroup
 
 	// defer OutPrinter(OpChan)
-	defer fmt.Println(strings.Repeat("meow meow",10))
+	// defer fmt.Println(strings.Repeat("billi meow", 10))
 	defer wg.Wait()
 	// fulStr := ""
 	for scanner.Scan() {
@@ -145,7 +148,7 @@ func ComputeSubPageScores(queryList []string, LocationAndScore map[int]int) map[
 
 }
 
-func CalcScoreMap(LocAndSco map[int]int, QC int, OpChan chan string) {
+func calcScoreMap_Deprecated(LocAndSco map[int]int, QC int, OpChan chan string) {
 	var ScoreMap = make(map[int][]int)
 	// OP := make(chan string, 100)
 	for loc, sco := range LocAndSco {
@@ -155,7 +158,48 @@ func CalcScoreMap(LocAndSco map[int]int, QC int, OpChan chan string) {
 		ScoreMap[sco] = append(ScoreMap[sco], loc)
 	}
 	OutStr := fmt.Sprint("\nQ", QC, ": ")
+	ScorePrinter_Deprecated(ScoreMap, OutStr, OpChan)
+
+}
+
+func CalcScoreMap(LocAndSco map[int]int, QC int, OpChan chan string) {
+	var ScoreMap = treemap.NewWithIntComparator()
+	// OP := make(chan string, 100)
+	OutStr := fmt.Sprint("\nQ", QC, ": ")
+	for loc, sco := range LocAndSco {
+		var val = treeset.NewWithIntComparator()
+		val1, hasKey := ScoreMap.Get(sco)
+		if !hasKey {
+			val1 = treeset.NewWithIntComparator()
+		}
+		val = val1.(*treeset.Set)
+		val.Add(loc)
+		ScoreMap.Put(sco, val)
+
+	}
+	// fmt.Printf("%#v",ScoreMap.Values())
+
 	ScorePrinter(ScoreMap, OutStr, OpChan)
+
+}
+
+func ScorePrinter(Scoremap *treemap.Map, OutStr string, Out chan string) {
+	var ind int = 1
+	ScoreIterator := Scoremap.Iterator()
+OUTER_FOR:
+	for ScoreIterator.End(); ScoreIterator.Prev(); {
+		Locations := ScoreIterator.Value()
+		LocationItr := Locations.(*treeset.Set).Iterator()
+
+		for LocationItr.Next() {
+			OutStr += fmt.Sprint(" P:", (LocationItr.Value().(int) + 1))
+			ind++
+			if ind > 5 {
+				break OUTER_FOR
+			}
+		}
+	}
+	Out <- OutStr
 
 }
 
@@ -171,7 +215,7 @@ func OutPrinter(channel chan string) {
 	}
 }
 
-func ScorePrinter(ScoreMap map[int][]int, OutStr string, Out chan string) {
+func ScorePrinter_Deprecated(ScoreMap map[int][]int, OutStr string, Out chan string) {
 	ScoreArr := make([]int, len(ScoreMap))
 	var stackJugaad map[int]bool = make(map[int]bool)
 
@@ -182,6 +226,7 @@ func ScorePrinter(ScoreMap map[int][]int, OutStr string, Out chan string) {
 	}
 	sort.Ints(ScoreArr)
 	var printVal = 0
+OUTER_FOR:
 	for i := len(ScoreArr) - 1; i >= 0; i-- {
 		Pages := ScoreMap[ScoreArr[i]]
 		sort.Ints(Pages)
@@ -192,11 +237,10 @@ func ScorePrinter(ScoreMap map[int][]int, OutStr string, Out chan string) {
 				printVal++
 			}
 			if printVal >= 5 {
-				break
+				break OUTER_FOR
 			}
 		}
 
 	}
 	Out <- OutStr
-	// OutPrinter(Out)
 }
