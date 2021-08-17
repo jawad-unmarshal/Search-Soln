@@ -3,19 +3,23 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"github.com/emirpasic/gods/maps/treemap"
 	"os"
 	"sort"
 	"strings"
+	"sync"
 )
 
 var SearchMap map[string][][2]int
 var SubPageMap map[string][][2]int
-var ScoreMap map[int][]int
+
+// var ScoreMap map[int][]int
 var MaxScore int = 8
-var QueryCount = 1
+var QueryCount = 0
 var PageCount int = 0
 
 func main() {
+	treemap.NewWithIntComparator()
 	SearchMap = make(map[string][][2]int)
 	SubPageMap = make(map[string][][2]int)
 	GrabInputAndRun()
@@ -23,6 +27,12 @@ func main() {
 
 func GrabInputAndRun() {
 	scanner := bufio.NewScanner(os.Stdin)
+	var wg sync.WaitGroup
+
+	// defer OutPrinter(OpChan)
+	defer fmt.Println(strings.Repeat("~~~~", 10))
+	defer wg.Wait()
+	// fulStr := ""
 	for scanner.Scan() {
 		Inp := scanner.Text()
 		fullInpArr := strings.Split(Inp, " ")
@@ -32,7 +42,12 @@ func GrabInputAndRun() {
 			SetUpDataMap(fullInpArr[1:])
 		} else if fullInpArr[0] == "q" || fullInpArr[0] == "Q" {
 			// fmt.Println("Query")
-			GetQueryAndCompute(fullInpArr[1:])
+			wg.Add(1)
+			var OpChan chan string = make(chan string, 1000)
+			go GetQueryAndCompute(fullInpArr[1:], &wg, OpChan)
+			defer OutPrinter(OpChan)
+			// go GetQueryAndCompute(fullInpArr[1:])
+
 		} else if fullInpArr[0] == "pp" || fullInpArr[0] == "PP" {
 			// fmt.Println("Subpage")
 			SetUpSubPageMap(fullInpArr[1:])
@@ -41,6 +56,7 @@ func GrabInputAndRun() {
 		}
 
 	}
+
 }
 
 func SetUpDataMap(data []string) {
@@ -62,6 +78,7 @@ func SetUpDataMap(data []string) {
 	PageCount++
 }
 
+// var mut sync.Mutex
 func SetUpSubPageMap(data []string) {
 	if int(len(data)) > MaxScore {
 		MaxScore = int(len(data))
@@ -80,17 +97,19 @@ func SetUpSubPageMap(data []string) {
 	// fmt.Println(SubPageMap)
 }
 
-func GetQueryAndCompute(data []string) {
-	fmt.Print("Q:", QueryCount)
+func GetQueryAndCompute(data []string, wg *sync.WaitGroup, OutputChannel chan string) {
+	// func GetQueryAndCompute(data []string) {
+
+	defer wg.Done()
 	QueryCount++
-	ComputeScores(data)
+	ComputeScores(data, QueryCount, OutputChannel)
 }
-func ComputeScores(queryList []string) {
+
+func ComputeScores(queryList []string, QC int, OpChan chan string) {
 	var LocationAndScore map[int]int = make(map[int]int)
 	QueryPosScore := MaxScore
 
 	for _, query := range queryList {
-		// fmt.Println(query, " found in map: ", SearchMap[query], "\nAt Location: ", SearchMap[query][0], "With penalty: ", SearchMap[query][1])
 		if SearchMap[query] != nil {
 			for _, MapVals := range SearchMap[query] {
 				var LocScore int = MaxScore - MapVals[1]
@@ -102,21 +121,18 @@ func ComputeScores(queryList []string) {
 		QueryPosScore--
 	}
 	LocationAndScore = ComputeSubPageScores(queryList, LocationAndScore)
-	// fmt.Println("Total Scores:", LocationAndScore)
-	CalcScoreMap(LocationAndScore)
+	CalcScoreMap(LocationAndScore, QC, OpChan)
 }
 
 func ComputeSubPageScores(queryList []string, LocationAndScore map[int]int) map[int]int {
 	QueryPosScore := MaxScore
 
 	for _, query := range queryList {
-		// fmt.Println(query, " found in map: ", SearchMap[query], "\nAt Location: ", SearchMap[query][0], "With penalty: ", SearchMap[query][1])
 		if SubPageMap[query] != nil {
 			for _, MapVals := range SubPageMap[query] {
 				var LocScore int = MaxScore - MapVals[1]
 				var CompScore float64 = float64(LocScore * QueryPosScore)
 				CompScore = 0.1 * CompScore
-				// fmt.Println(CompScore)
 				CompScore += float64(LocationAndScore[MapVals[0]])
 				LocationAndScore[MapVals[0]] = int(CompScore)
 			}
@@ -127,24 +143,34 @@ func ComputeSubPageScores(queryList []string, LocationAndScore map[int]int) map[
 
 }
 
-func CalcScoreMap(LocAndSco map[int]int) {
-	ScoreMap = make(map[int][]int)
-
+func CalcScoreMap(LocAndSco map[int]int, QC int, OpChan chan string) {
+	var ScoreMap = make(map[int][]int)
+	// OP := make(chan string, 100)
 	for loc, sco := range LocAndSco {
 		if ScoreMap[sco] == nil {
 			ScoreMap[sco] = make([]int, 0)
 		}
 		ScoreMap[sco] = append(ScoreMap[sco], loc)
 	}
-
-	if ScoreMap != nil {
-		ScorePrinter()
-	}
-	ScoreMap = make(map[int][]int)
-	fmt.Println()
+	OutStr := fmt.Sprint("\nQ", QC, ": ")
+	ScorePrinter(ScoreMap, OutStr, OpChan)
 
 }
-func ScorePrinter() {
+
+func OutPrinter(channel chan string) {
+	for {
+		select {
+		case PageValue := <-channel:
+			fmt.Print(PageValue)
+		default:
+			fmt.Println()
+			// wg.Done()
+			return
+		}
+	}
+}
+
+func ScorePrinter(ScoreMap map[int][]int, OutStr string, Out chan string) {
 	ScoreArr := make([]int, len(ScoreMap))
 	var stackJugaad map[int]bool = make(map[int]bool)
 
@@ -154,22 +180,22 @@ func ScorePrinter() {
 		i++
 	}
 	sort.Ints(ScoreArr)
-	//Iterate in reverse
 	var printVal = 0
 	for i := len(ScoreArr) - 1; i >= 0; i-- {
-		// fmt.Println("For a Score of ",ScoreArr[i],"we have values: ",ScoreMap[ScoreArr[i]])
 		Pages := ScoreMap[ScoreArr[i]]
 		sort.Ints(Pages)
 		for _, page := range Pages {
 			if !stackJugaad[page] {
 				stackJugaad[page] = true
-				fmt.Print(" P:", (page + 1))
+				OutStr += fmt.Sprint(" P:", (page + 1))
 				printVal++
 			}
 			if printVal >= 5 {
-				return
+				break
 			}
 		}
 
 	}
+	Out <- OutStr
+	// OutPrinter(Out)
 }
