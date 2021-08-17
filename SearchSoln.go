@@ -17,6 +17,7 @@ var SubPageMap map[string][][2]int
 var MaxScore int = 8
 var QueryCount = 0
 var PageCount int = 0
+//Grab all queries and then compute?
 
 func main() {
 	treemap.NewWithIntComparator()
@@ -30,7 +31,7 @@ func GrabInputAndRun() {
 	var wg sync.WaitGroup
 
 	// defer OutPrinter(OpChan)
-	defer fmt.Println(strings.Repeat("~~~~", 10))
+	defer fmt.Println(strings.Repeat("meow meow",10))
 	defer wg.Wait()
 	// fulStr := ""
 	for scanner.Scan() {
@@ -45,7 +46,7 @@ func GrabInputAndRun() {
 			wg.Add(1)
 			var OpChan chan string = make(chan string, 1000)
 			go GetQueryAndCompute(fullInpArr[1:], &wg, OpChan)
-			defer OutPrinter(OpChan)
+			// defer OutPrinter(OpChan)
 			// go GetQueryAndCompute(fullInpArr[1:])
 
 		} else if fullInpArr[0] == "pp" || fullInpArr[0] == "PP" {
@@ -99,8 +100,9 @@ func SetUpSubPageMap(data []string) {
 
 func GetQueryAndCompute(data []string, wg *sync.WaitGroup, OutputChannel chan string) {
 	// func GetQueryAndCompute(data []string) {
-
+	defer OutPrinter(OutputChannel)
 	defer wg.Done()
+
 	QueryCount++
 	ComputeScores(data, QueryCount, OutputChannel)
 }
@@ -163,8 +165,7 @@ func OutPrinter(channel chan string) {
 		case PageValue := <-channel:
 			fmt.Print(PageValue)
 		default:
-			fmt.Println()
-			// wg.Done()
+			fmt.Println("")
 			return
 		}
 	}
